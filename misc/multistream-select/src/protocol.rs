@@ -81,7 +81,9 @@ impl TryFrom<Bytes> for Protocol {
     type Error = ProtocolError;
 
     fn try_from(value: Bytes) -> Result<Self, Self::Error> {
-        if !value.as_ref().starts_with(b"/") {
+        // Protocol names are arbitrary non-empty strings; a leading `/` is a
+        // convention, not a requirement of the multistream-select protocol.
+        if value.is_empty() {
             return Err(ProtocolError::InvalidProtocol);
         }
         let protocol_as_string =
@@ -103,7 +105,7 @@ impl TryFrom<&str> for Protocol {
     type Error = ProtocolError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
-        if !value.starts_with('/') {
+        if value.is_empty() {
             return Err(ProtocolError::InvalidProtocol);
         }
 

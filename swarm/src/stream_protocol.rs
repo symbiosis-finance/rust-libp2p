@@ -9,7 +9,9 @@ use either::Either;
 /// Identifies a protocol for a stream.
 ///
 /// libp2p nodes use stream protocols to negotiate what to do with a newly opened stream.
-/// Stream protocols are string-based and must start with a forward slash: `/`.
+/// Stream protocols are non-empty strings. By convention they start with a forward
+/// slash (`/`), but this is not required: other implementations accept and use bare
+/// names such as `EntryQuorum/42`, and so does this one.
 #[derive(Clone, Eq)]
 pub struct StreamProtocol {
     inner: Either<&'static str, Arc<str>>,
@@ -20,11 +22,10 @@ impl StreamProtocol {
     ///
     /// # Panics
     ///
-    /// This function panics if the protocol does not start with a forward slash: `/`.
+    /// This function panics if the protocol is empty.
     pub const fn new(s: &'static str) -> Self {
-        match s.as_bytes() {
-            [b'/', ..] => {}
-            _ => panic!("Protocols should start with a /"),
+        if s.is_empty() {
+            panic!("Protocols must not be empty");
         }
 
         StreamProtocol {
@@ -34,11 +35,11 @@ impl StreamProtocol {
 
     /// Attempt to construct a protocol from an owned string.
     ///
-    /// This function will fail if the protocol does not start with a forward slash: `/`.
+    /// This function will fail if the protocol is empty.
     /// Where possible, you should use [`StreamProtocol::new`] instead to avoid allocations.
     pub fn try_from_owned(protocol: String) -> Result<Self, InvalidProtocol> {
-        if !protocol.starts_with('/') {
-            return Err(InvalidProtocol::missing_forward_slash());
+        if protocol.is_empty() {
+            return Err(InvalidProtocol::empty());
         }
 
         Ok(StreamProtocol {
@@ -98,17 +99,14 @@ pub struct InvalidProtocol {
 }
 
 impl InvalidProtocol {
-    pub(crate) fn missing_forward_slash() -> Self {
+    pub(crate) fn empty() -> Self {
         InvalidProtocol { _private: () }
     }
 }
 
 impl fmt::Display for InvalidProtocol {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "invalid protocol: string does not start with a forward slash"
-        )
+        write!(f, "invalid protocol: string is empty")
     }
 }
 
@@ -133,5 +131,17 @@ mod tests {
             display, "/foo/bar/1.0.0",
             "protocol to display print as string without quotes"
         );
+    }
+
+    #[test]
+    fn stream_protocol_accepts_bare_names() {
+        let protocol = StreamProtocol::new("EntryQuorum/42");
+        assert_eq!(protocol.as_ref(), "EntryQuorum/42");
+
+        let owned = StreamProtocol::try_from_owned("SigningMessages/abc".to_owned())
+            .expect("bare protocol names are valid");
+        assert_eq!(owned.as_ref(), "SigningMessages/abc");
+
+        assert!(StreamProtocol::try_from_owned(String::new()).is_err());
     }
 }
