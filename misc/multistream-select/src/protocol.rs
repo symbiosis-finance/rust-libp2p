@@ -190,9 +190,15 @@ impl Message {
             return Ok(Message::ListProtocols);
         }
 
-        // If it starts with a `/`, ends with a line feed without any
-        // other line feeds in-between, it must be a protocol name.
-        if msg.first() == Some(&b'/')
+        // If it starts with a `/` or an ASCII alphanumeric character and ends
+        // with a line feed without any other line feeds in-between, it is a
+        // protocol name. Names need not start with `/` (go-libp2p accepts any
+        // string). A single-entry `ls` response whose varint length prefix
+        // happens to be an alphanumeric byte is indistinguishable from such a
+        // name; `ls` is never sent by rust-libp2p dialers.
+        if msg
+            .first()
+            .is_some_and(|b| *b == b'/' || b.is_ascii_alphanumeric())
             && msg.last() == Some(&b'\n')
             && !msg[..msg.len() - 1].contains(&b'\n')
         {
@@ -466,6 +472,20 @@ impl fmt::Display for ProtocolError {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn decode_bare_protocol_name() {
+        let msg = Message::decode(Bytes::from_static(b"EntryQuorum/42\n")).unwrap();
+        assert_eq!(
+            msg,
+            Message::Protocol(Protocol::try_from("EntryQuorum/42").unwrap())
+        );
+        let msg = Message::decode(Bytes::from_static(b"/ipfs/ping/1.0.0\n")).unwrap();
+        assert_eq!(
+            msg,
+            Message::Protocol(Protocol::try_from("/ipfs/ping/1.0.0").unwrap())
+        );
+    }
+
     use std::iter;
 
     use quickcheck::*;
